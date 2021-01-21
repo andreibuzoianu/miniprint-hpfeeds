@@ -22,7 +22,11 @@ import re
 from datetime import datetime
 
 class Printer:
-    def __init__(self, logger, printer_id="hp LaserJet 4200", code=10001, ready_msg="Ready", online=True):
+
+    events_json = {}
+    events_list = []
+
+    def __init__(self, logger, src_ip, printer_id="hp LaserJet 4200", code=10001, ready_msg="Ready", online=True):
         self.printer_id = printer_id
         self.code = code
         self.ready_msg = ready_msg
@@ -35,6 +39,10 @@ class Printer:
         self.current_raw_print_job = ''
         self.receiving_postscript = False
         self.postscript_data = ''
+
+        self.src_ip = src_ip
+        self.events_json.update({'src_ip': src_ip})
+
 
         # Filesystem from HP LaserJet 4200n
         self.fs.create_dir("/PJL")
@@ -119,13 +127,16 @@ class Printer:
         file_name = request_parameters["NAME"].replace('"', '').split(":")[1]
         
         self.logger.debug(("fsdownload - process - contents: " + file_contents).encode('utf-8'))
+        self.events_list.append(("fsdownload - process - contents: " + file_contents).encode('utf-8'))
 
         if file_contents[0:2] == '\r\n':  # Trim leading newline
             self.logger.debug("fsdownload - process - Leading newline found")
+            self.events_list.append("fsdownload - process - Leading newline found")
             file_contents = file_contents[2:]
 
         if file_contents[-2:] == '\r\n':  # Trim trailing newline
             self.logger.debug("fsdownload - process - Trailing newline found")
+            self.events_list.append("fsdownload - process - Trailing newline found")
             file_contents = file_contents[0:-2]
 
         # Check if path exists and is file
@@ -136,14 +147,17 @@ class Printer:
 
         self.fs.create_file(file_path=file_name, contents=file_contents)  # TODO: Handle errors if file exists or containing directory doesn't exist
         self.logger.info("fsdownload - response - Sending empty response")
+        self.events_list.append("fsdownload - response - Sending empty response")
         return ''
 
 
     def command_echo(self, request):
         self.logger.info("echo - request - Received request for delimiter")
+        self.events_list.append("echo - request - Received request for delimiter")
         response = "@PJL " + request
         response += '\x1b'
         self.logger.info("echo - response - Responding with: " + str(response.encode('UTF-8')))
+        self.events_list.append("echo - response - Responding with: " + str(response.encode('UTF-8')))
         return response
     
     
@@ -152,6 +166,7 @@ class Printer:
         requested_dir = request_parameters["NAME"].replace('"', '').split(":")[1]
     
         self.logger.debug("fsdirlist - request - Requested dir: '" + requested_dir + "'")
+        self.events_list.append("fsdirlist - request - Requested dir: '" + requested_dir + "'")
         return_entries = ""
     
         if self.fos.path.exists(requested_dir):
@@ -167,6 +182,7 @@ class Printer:
     
         response = '@PJL FSDIRLIST NAME=' + request_parameters['NAME'] + return_entries
         self.logger.info("fsdirlist - response - " + str(response.encode('UTF-8')))
+        self.events_list.append("fsdirlist - response - " + str(response.encode('UTF-8')))
         return response
         
 
@@ -174,6 +190,7 @@ class Printer:
         request_parameters = self.get_parameters(request)
         requested_dir = request_parameters["NAME"].replace('"', '').split(":")[1]
         self.logger.info("fsmkdir - request - " + requested_dir)
+        self.events_list.append("fsmkdir - request - " + requested_dir)
     
         '''
         Check if dir exists
@@ -186,15 +203,18 @@ class Printer:
             self.fs.create_dir(requested_dir)
     
         self.logger.info("fsquery - response - Sending empty response")
+        self.events_list.append("fsquery - response - Sending empty response")
         return ''
     
     
     def command_fsquery(self, request):
         request_parameters = self.get_parameters(request)
         self.logger.info("fsquery - request - " + request_parameters["NAME"])
+        self.events_list.append("fsquery - request - " + request_parameters["NAME"])
     
         requested_item = request_parameters["NAME"].replace('"', '').split(":")[1]
         self.logger.debug("fsquery - request - requested_item: " + requested_item)
+        self.events_list.append("fsquery - request - requested_item: " + requested_item)
         return_data = ''
     
         if (self.fos.path.exists(requested_item)):
@@ -208,15 +228,18 @@ class Printer:
     
         response='@PJL FSQUERY ' + return_data
         self.logger.info("fsquery - response - " + str(return_data.encode('UTF-8')))
+        self.events_list.append("fsquery - response - " + str(return_data.encode('UTF-8')))
         return response
     
 
     def command_fsupload(self, request):
         request_parameters = self.get_parameters(request)
         self.logger.info("fsupload - request - " + request_parameters["NAME"])
+        self.events_list.append("fsupload - request - " + request_parameters["NAME"])
     
         upload_file = request_parameters["NAME"].replace('"', '').split(":")[1]
         self.logger.debug("fsupload - request - requested file: " + upload_file)
+        self.events_list.append("fsupload - request - requested file: " + upload_file)
         return_data = ''
 
         if (self.fos.path.exists(upload_file)):
@@ -232,20 +255,25 @@ class Printer:
 
         response='@PJL FSUPLOAD ' + return_data
         self.logger.info("fsupload - response - " + str(response.encode('UTF-8')))
+        self.events_list.append("fsupload - response - " + str(response.encode('UTF-8')))
         return response
 
     
     def command_info_id(self, request):
         self.logger.info("info_id - request - ID requested")
+        self.events_list.append("info_id - request - ID requested")
         response = '@PJL INFO ID\r\n' + self.printer_id + '\r\n\x1b'
         self.logger.info("info_id - response - " + str(response.encode('UTF-8')))
+        self.events_list.append("info_id - response - " + str(response.encode('UTF-8')))
         return response
         
 
     def command_info_status(self, request):
         self.logger.info("info_status - request - Client requests status")
+        self.events_list.append("info_status - request - Client requests status")
         response = '@PJL INFO STATUS\r\nCODE=' + str(self.code) + '\r\nDISPLAY="' + self.ready_msg + '"\r\nONLINE=' + str(self.online)
         self.logger.info("info_status - response - " + str(response.encode('UTF-8')))
+        self.events_list.append("info_status - response - " + str(response.encode('UTF-8')))
         return response
 
 
@@ -253,15 +281,19 @@ class Printer:
         request_parameters = self.get_parameters(request)
         rdymsg = request_parameters["DISPLAY"]
         self.logger.info("rdymsg - request - Ready message: " + rdymsg)
+        self.events_list.append("rdymsg - request - Ready message: " + rdymsg)
 
         self.ready_msg = rdymsg.replace('"', '')
         self.logger.info("rdymsg - response - Sending back empty ACK")
+        self.events_list.append("rdymsg - response - Sending back empty ACK")
         return ''
 
 
     def command_ustatusoff(self, request):
         self.logger.info("ustatusoff - request - Request received")
+        self.events_list.append("ustatusoff - request - Request received")
         self.logger.info("ustatusoff - response - Sending empty reply")
+        self.events_list.append("ustatusoff - response - Sending empty reply")
         return ''
             
 
@@ -269,12 +301,14 @@ class Printer:
         filename = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S-%f") + ".ps"
         if self.receiving_postscript:
             self.logger.info("save_postscript - saving - " + filename)
+            self.events_list.append("save_postscript - saving - " + filename)
             with open("./uploads/" + filename, 'w') as f:
                 f.write(self.postscript_data)
             self.postscript_data = ''
             self.receiving_postscript = False
         else:
             self.logger.info("save_postscript - saving - Nothing to save!")
+            self.events_list.append("save_postscript - saving - Nothing to save!")
 
 
     def save_raw_print_job(self):
@@ -282,10 +316,12 @@ class Printer:
         filename = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S-%f") + ".txt"
         if self.current_raw_print_job:
             self.logger.info("save_raw_print_job - saving - " + filename)
+            self.events_list.append("save_raw_print_job - saving - " + filename)
             with open("./uploads/" + filename, 'w') as f:
                 f.write(self.current_raw_print_job)
             self.current_raw_print_job = ''
             self.printing_raw_job = False
         else:
             self.logger.info("save_raw_print_job - saving - Nothing to save")
+            self.events_list.append("save_raw_print_job - saving - Nothing to save")
 

@@ -1,3 +1,4 @@
 pyfakefs
 pytest-xdist
 argparse
+hpfeeds

@@ -26,6 +26,10 @@ import traceback
 from printer import Printer
 import argparse
 import re
+import hpfeeds, json
+from datetime import datetime
+from hpf_conf import *
+
 
 
 parser = argparse.ArgumentParser(description='''miniprint - a medium interaction printer honeypot
@@ -102,12 +106,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return commands
 
 
-
     def handle(self):
+        hpclient = hpfeeds.new(HPF_HOST, HPF_PORT, HPF_IDENT, HPF_SECRET)
         # self.request is the TCP socket connected to the client
-        logger.info("handle - open_conn - " + self.client_address[0])
-        printer = Printer(logger)
-        
+        src_ip = self.client_address[0]
+        printer = Printer(logger, src_ip)
+        logger.info("handle - open_conn - " + src_ip)
+        printer.events_list.append("handle - open_conn - " + src_ip)
+
         emptyRequest = False
         while emptyRequest == False:
 
@@ -121,6 +127,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 self.data = self.request.recv(1024).strip()
             except Exception as e:
                 logger.error("handle - receive - Error receiving data - possible port scan")
+                printer.events_list.append("handle - receive - Error receiving data - possible port scan")
                 emptyRequest = True
                 break
 
@@ -132,6 +139,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 printer.postscript_data = request
 
                 logger.info('handle - postscript - Received first postscript request of file')
+                printer.events_list.append('handle - postscript - Received first postscript request of file')
 
                 continue
             elif printer.receiving_postscript:
@@ -146,6 +154,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             commands = self.parse_commands(request)
 
             logger.debug('handle - request - ' + str(request.encode('UTF-8')))
+            printer.events_list.append('handle - request - ' + str(request.encode('UTF-8')))
 
             if len(commands) == 0:  # If we're sent an empty request, close the connection
                 emptyRequest = True
@@ -184,20 +193,28 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                             response += printer.command_rdymsg(command)
                         else:
                             logger.error("handle - cmd_unknown - " + str(command))
+                            printer.events_list.append("handle - cmd_unknown - " + str(command))
                     else:
                         response += printer.append_raw_print_job(command)
 
                 logger.info("handle - response - " + str(response.encode('UTF-8')))
+                printer.events_list.append("handle - response - " + str(response.encode('UTF-8')))
                 self.request.sendall(response.encode('UTF-8'))
 
             except Exception as e:
                 tb = sys.exc_info()[2]
                 traceback.print_tb(tb)
                 logger.error("handle - error_caught - " + str(e))
+                printer.events_list.append("handle - error_caught - " + str(e))
 
         if printer.printing_raw_job:
             printer.save_raw_print_job()
         logger.info("handle - close_conn - " + self.client_address[0])
+        printer.events_list.append("handle - close_conn - " + self.client_address[0])
+        now = datetime.now()
+        events_json = {"src_ip": src_ip, "timestamp": datetime.timestamp(now), "events": printer.events_list}
+        hpclient.publish(HPF_CHAN, json.dumps(events_json))
+        
 
 if __name__ == "__main__":
     HOST, PORT = args.host, 9100
