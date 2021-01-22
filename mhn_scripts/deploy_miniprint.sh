@@ -13,7 +13,11 @@ chmod 755 registration.sh
 # Note: this will export the HPF_* variables
 . ./registration.sh $server_url $deploy_key "miniprint"
 
-cat >> hpf_conf.py <<EOF
+cd /opt
+git clone https://github.com/andreibuzoianu/miniprint-hpfeeds
+cd miniprint-hpfeeds
+git checkout master
+cat > hpf_conf.py <<EOF
 HPF_ENABLED = True
 HPF_HOST = '$HPF_HOST'
 HPF_PORT = $HPF_PORT
@@ -21,15 +25,11 @@ HPF_IDENT = '$HPF_IDENT'
 HPF_SECRET = '$HPF_SECRET'
 HPF_CHAN = 'miniprint.events'
 EOF
+pip3 install --user virtualenv
+python3 -m virtualenv venv && source ./venv/bin/activate
+pip3 install -r requirements.txt
 
-cd /opt
-git clone https://github.com/andreibuzoianu/miniprint-hpfeeds
-cd miniprint-hpfeeds
-git checkout master
-virtualenv venv && source ./venv/bin/activate
-#python3 ./server.py -b 0.0.0.0 &
-
-cat > /etc/supervisor/conf.d/wordpot.conf <<EOF
+cat > /etc/supervisor/conf.d/miniprint-hpfeeds.conf <<EOF
 [program:miniprint-hpfeeds]
 command=/opt/miniprint-hpfeeds/venv/bin/python /opt/miniprint-hpfeeds/server.py -b 0.0.0.0
 directory=/opt/miniprint-hpfeeds
