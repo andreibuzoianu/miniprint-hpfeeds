@@ -29,6 +29,7 @@ import re
 import hpfeeds, json
 from datetime import datetime
 from hpf_conf import *
+import socket
 
 
 
@@ -109,10 +110,13 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         hpclient = hpfeeds.new(HPF_HOST, HPF_PORT, HPF_IDENT, HPF_SECRET)
         # self.request is the TCP socket connected to the client
-        src_ip = self.client_address[0]
-        printer = Printer(logger, src_ip)
-        logger.info("handle - open_conn - " + src_ip)
-        printer.events_list.append("handle - open_conn - " + src_ip)
+        source_ip = self.client_address[0]
+        source_port = self.client_address[1]
+        dest_ip = socket.gethostbyname(socket.gethostname())
+        dest_port = self.server.server_address[1]
+        printer = Printer(logger, source_ip)
+        logger.info("handle - open_conn - " + source_ip + ":" + str(source_port))
+        printer.events_list.append("handle - open_conn - " + source_ip + ":" + str(source_port))
 
         emptyRequest = False
         while emptyRequest == False:
@@ -209,10 +213,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         if printer.printing_raw_job:
             printer.save_raw_print_job()
-        logger.info("handle - close_conn - " + self.client_address[0])
-        printer.events_list.append("handle - close_conn - " + self.client_address[0])
+        logger.info("handle - close_conn - " + source_ip + ":" + str(source_port))
+        printer.events_list.append("handle - close_conn - " + source_ip + ":" + str(source_port))
         now = datetime.now()
-        events_json = {"src_ip": src_ip, "timestamp": datetime.timestamp(now), "events": printer.events_list}
+        events_json = {"source_ip": source_ip, "source_port" : source_port, "dest_ip": dest_ip, "dest_port": dest_port,"timestamp": datetime.timestamp(now), "events": printer.events_list}
         hpclient.publish(HPF_CHAN, json.dumps(events_json))
         
 
