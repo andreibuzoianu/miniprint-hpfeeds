@@ -36,8 +36,8 @@ pip3 install -r requirements.txt
 distro=$(awk -F= '/^ID_LIKE/{print $2}' /etc/os-release)
 if [ "$distro" == "debian" ]; then
 
-apt update
-apt install supervisor -y
+apt-get update
+apt-get install supervisor -y
 
 cat > /etc/supervisor/conf.d/miniprint-hpfeeds.conf <<-EOF
 [program:miniprint-hpfeeds]
@@ -50,8 +50,15 @@ autorestart=true
 redirect_stderr=true
 stopsignal=QUIT
 EOF
-elif [ "$distro" == "rhel fedora" ]; then
-    cat > /etc/supervisord.d/miniprint-hpfeeds.ini <<-EOF
+
+systemctl start supervisor
+
+elif [ "$distro" == "\"rhel fedora\"" ]; then
+
+yum update
+yum install supervisor -y
+
+cat > /etc/supervisord.d/miniprint-hpfeeds.ini <<-EOF
 [program:miniprint-hpfeeds]
 command=/opt/miniprint-hpfeeds/venv/bin/python /opt/miniprint-hpfeeds/server.py -b 0.0.0.0
 directory=/opt/miniprint-hpfeeds
@@ -62,6 +69,9 @@ autorestart=true
 redirect_stderr=true
 stopsignal=QUIT
 EOF
+
+service start supervisord
+
 else
     echo "I don.t know that to do next"
 fi
