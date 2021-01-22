@@ -14,6 +14,7 @@ chmod 755 registration.sh
 . ./registration.sh $server_url $deploy_key "miniprint"
 
 cd /opt
+rm -rf /opt/miniprint-hpfeeds
 git clone https://github.com/andreibuzoianu/miniprint-hpfeeds
 cd miniprint-hpfeeds
 git checkout master
@@ -26,10 +27,19 @@ HPF_SECRET = '$HPF_SECRET'
 HPF_CHAN = 'miniprint.events'
 EOF
 pip3 install --user virtualenv
-python3 -m virtualenv venv && source ./venv/bin/activate
+python3.7 -m virtualenv venv && source ./venv/bin/activate
 pip3 install -r requirements.txt
 
-cat > /etc/supervisor/conf.d/miniprint-hpfeeds.conf <<EOF
+
+
+# Supervisor
+distro=$(awk -F= '/^ID_LIKE/{print $2}' /etc/os-release)
+if [ "$distro" == "debian" ]; then
+
+apt update
+apt install supervisor -y
+
+cat > /etc/supervisor/conf.d/miniprint-hpfeeds.conf <<-EOF
 [program:miniprint-hpfeeds]
 command=/opt/miniprint-hpfeeds/venv/bin/python /opt/miniprint-hpfeeds/server.py -b 0.0.0.0
 directory=/opt/miniprint-hpfeeds
@@ -40,3 +50,21 @@ autorestart=true
 redirect_stderr=true
 stopsignal=QUIT
 EOF
+elif [ "$distro" == "rhel fedora" ]; then
+    cat > /etc/supervisord.d/miniprint-hpfeeds.ini <<-EOF
+[program:miniprint-hpfeeds]
+command=/opt/miniprint-hpfeeds/venv/bin/python /opt/miniprint-hpfeeds/server.py -b 0.0.0.0
+directory=/opt/miniprint-hpfeeds
+stdout_logfile=/opt/miniprint-hpfeeds/miniprint-hpfeeds.out
+stderr_logfile=/opt/miniprint-hpfeeds/miniprint-hpfeeds.err
+autostart=true
+autorestart=true
+redirect_stderr=true
+stopsignal=QUIT
+EOF
+else
+    echo "I don.t know that to do next"
+fi
+
+supervisorctl update
+supervisorctl start miniprint-hpfeeds
